@@ -17,7 +17,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```{r}
 ## Data directly from Kari, PD TMT output
 #### Load required pacakges, MSstats ####
-list.of.packages <- c("MSstats", "MSstatsTMT", "ggplot2")
+list.of.packages <- c("MSstats", "MSstatsTMT", "ggplot2", "plotly")
 ## installing instead in dockerfile specific versions
 lapply(list.of.packages, library, character.only = TRUE)
 
@@ -161,6 +161,12 @@ if(!file.exists("./data_images/24_01_13.RData")) {
   save.image("./data_images/24_01_13.RData")
 }
 
+#### Also mrege in protein names, desc, etc. from UniProt ####
+df_up <- read.csv("uniprotkb_Human_AND_model_organism_9606_2024_10_21.tsv",header = T, na.strings = c(""), sep = "\t")
+names(df_up)[which(names(df_up)=="Entry")] <- "Protein"
+df_plot <- list_DA_msstats$ComparisonResult
+df_plot <- merge(df_up, df_plot, by = "Protein", all.y = T)
+
 ```
 
 ## Exploring processed data
@@ -168,10 +174,20 @@ if(!file.exists("./data_images/24_01_13.RData")) {
 Starting with volcano plots.
 
 ```{r}
-df_plot <- list_DA_msstats$ComparisonResult
+
 vec_comparisons <- unique(df_plot$Label)
-df_plot <- df_plot[which(df_plot$Label==), ]
-ggplot(data = )
+df_plotme <- df_plot[which(df_plot$Label=="TRAF7_3nM-Control"), ]
+ggplotly(ggplot(data = df_plotme, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  geom_point() +
+  geom_hline(yintercept = -log10(0.05))
+)
+
+df_linear <- df_plot[which(df_plot$Label=="TRAF7_3nM-Control" | df_plot$Label=="TRAF7_30nM-Control"), ]
+df_linear2 <- reshape(df_linear, idvar = "Protein", timevar = "Label", direction = "wide")
+ggplotly(
+  ggplot(data = df_linear2, aes(x = `log2FC.TRAF7_3nM-Control`, y = `log2FC.TRAF7_30nM-Control`, label = `Gene.Names..primary..TRAF7_3nM-Control`)) +
+    geom_point()
+)
 ```
 
 

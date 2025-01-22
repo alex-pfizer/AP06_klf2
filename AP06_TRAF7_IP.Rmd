@@ -1,5 +1,5 @@
 ---
-title: "TRAF7 IP"
+title: "TRAF7 Venn Diagram"
 author: "Alex Panov"
 date: "2025-01-13"
 output: 
@@ -12,14 +12,16 @@ output:
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
-## MSstats
+## MSstats for Kari and Jaimeen IP data
+Antibody is from Proteintech (?) Immunogen data says somewhere between 75-420, could be RING or Zinc-finger domains, the alpha helix, or barely beginning of the WD40 domain.
 
 ```{r}
 ## Data directly from Kari, PD TMT output
 #### Load required pacakges, MSstats ####
-list.of.packages <- c("MSstats", "MSstatsTMT", "ggplot2", "plotly")
+list.of.packages <- c("MSstats", "MSstatsTMT", "ggplot2", "plotly", "ggrepel")
 ## installing instead in dockerfile specific versions
 lapply(list.of.packages, library, character.only = TRUE)
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
 #### Read in data from PDP ####
 ## Data table to be passed from PDP
@@ -33,47 +35,6 @@ char_PDP_df_source <- "PD"
 
 #### Filtering and X to MSstats Format Conversion, Annotation file ####
 if (char_PDP_df_source == "PD") {
-  ## Building df_annot manually
-  ## Building the annotation file, df_annot, from PDP output "pools_export" file.
-  # df_pools <- read.csv("dummy.tsv", header = T, sep = "\t", na.strings = c("", "NA", "NaN", "NULL", "Null", "null", "na"))
-  # ## This is annotation df for TMT experiments 
-  # ## Create the start of a df_annot df to fill
-  # df_annot <- data.frame(
-  #   ## sample_channel == Channel
-  #   Channel = df_pools$sample_channel,
-  #   ## treatment/drug == Condition, needs to be sorted out below
-  #   Condition = rep(NA, length (df_pools$sample_channel)),
-  #   ## BioReplicate == df$num <- ave(df$val, df$cat, FUN = seq_along) from Condition
-  #   BioReplicate = rep(NA, length (df_pools$sample_channel)),
-  #   ## Number of technical replicates. This will be accommodated in the future.
-  #   TechRepMixture = rep(1, length(df_pools$sample_channel)),
-  #   ## Fraction == matches number of Spectrum.File
-  #   Fraction = rep(NA, length (df_pools$sample_channel)),
-  #   ## Mixture, likely is 1. This would be multiple TMT mixtures. Another case for future.
-  #   Mixture = rep(1, length (df_pools$sample_channel)),
-  #   ## Run will be matched to Spectrum.File
-  #   Run = rep(NA, length (df_pools$sample_channel))
-  # )
-  # ## Condition. For now, we can handle by drug/treatment columns
-  # ## if there is a value in treatment, but not in drugs, use treatment column
-  # df_annot$Condition <- ifelse(!is.na(df_pools$treatment) & is.na(df_pools$drug), df_pools$treatment, NA)
-  # ## if there is a value in drugs, but not treatment, use drugs
-  # df_annot$Condition <- ifelse(is.na(df_pools$treatment) & !is.na(df_pools$drug), df_pools$drug, df_annot$Condition)
-  # ## all remaining conditions should concatenate
-  # df_annot$Condition <- ifelse(is.na(df_annot$Condition), paste0(df_pools$treatment, ",",df_pools$drug), df_annot$Condition)
-  # 
-  # ## BioReplicate. We are assigning automatically based on "Condition", or "treatment" and "drug" from df_pools, but this can change if PDP has replicates entry.
-  # df_annot$BioReplicate <- ave(df_annot$Channel, df_annot$Condition, FUN = seq_along)
-  # ## repeat this the number of times * fractions/Spectrum.File
-  # df_annot <- do.call("rbind", replicate(length(unique(df_raw_from_PDP$Spectrum.File)), df_annot, simplify = FALSE))
-  # ## Fill in fraction number
-  # df_annot$Fraction <- rep(c(1:length(unique(df_raw_from_PDP$Spectrum.File))), each = length(unique(df_annot$Channel)))
-  # ## Add Spectrum.File for each fraction, in order
-  # vec_spectrum_files <- unique(df_raw_from_PDP$Spectrum.File)
-  # vec_spectrum_files <- vec_spectrum_files[order(nchar(vec_spectrum_files), vec_spectrum_files)]
-  # df_annot$Run <- rep(vec_spectrum_files, each = length(unique(df_annot$Channel)))
-  # ## save memory
-  # df_annot_precursor <- NULL
   df_annot <- read.csv("PD_annot_manual.csv", header = T, sep = ",")
   df_annot <- do.call("rbind", replicate(length(unique(df_raw_from_PDP$Spectrum.File)), df_annot, simplify = FALSE))
   df_annot$TechRepMixture <- 1
@@ -85,7 +46,9 @@ if (char_PDP_df_source == "PD") {
   
   ## Run the MSstats converter. "Master.Protein.Accessions" is used for "ProteinName". "Sequence" and "Modifications" are used for "PeptideSequence". "Charge"
   list_quant <- MSstatsTMT::PDtoMSstatsTMTFormat(input = df_raw_from_PDP, 
-                                                 annotation = df_annot, 
+                                                 annotation = df_annot,
+                                                 ## assigns "best" protein. Wonder how msstats handles this without. 
+                                                 which.proteinid = "Master.Protein.Accessions",
                                                  use_log_file = FALSE)
   ## save memory
   df_raw_from_PDP <- NULL
@@ -101,20 +64,22 @@ if (char_PDP_df_source == "PD") {
   ## need to hold onto the entire list_MSstats_processed for the groupComparison step later
   
   ## some PD TMT plots. Might be useful integration eventually.
-  dataProcessPlotsTMT(data = list_MSstats_processed, type = "QCplot", which.Protein = "allonly", width = 21, height = 7)
+  # dataProcessPlotsTMT(data = list_MSstats_processed, type = "QCplot", which.Protein = "allonly", width = 21, height = 7)
   ## This is nice for peptide level analysis!
-  dataProcessPlotsTMT(data = list_MSstats_processed, type = "ProfilePlot", which.Protein = 1, width = 21, height = 7)
+  # dataProcessPlotsTMT(data = list_MSstats_processed, type = "ProfilePlot", which.Protein = 1, width = 21, height = 7)
 }
 
 if(char_PDP_df_source=="PD") {
   ## make the controls, aka denominator
   ## PDP SOURCE
-  vec_control_conditions <- c("Control", "TRAF7", "TRAF7_supp")
+  vec_control_conditions <- c("Control", "Ab", "Ab_supp")
   ## create a list to collapse at end of building, one matrix for each control condition
   ## each element of this list will become a matrix, which we will rbind together at end
   list_mat_comparison_msstats <- vector("list", length= length(vec_control_conditions))
   ## make the experimental conditions. These have to match what PDP assigns as vec_control_conditions, have to match what is in the dataset. For Spectronaut, this is R.Condition column. 
   vec_experimental_conditions <- levels(list_MSstats_processed$ProteinLevelData$Condition)[!(levels(list_MSstats_processed$ProteinLevelData$Condition) %in% vec_control_conditions)]
+  ## Special line for this experiment specifically
+  vec_experimental_conditions <- c("Ab", vec_experimental_conditions)
   ## how to automate this matrix, hmm
   
   ## First create matrices that are length(vec_experimental_conditions) rows long with rownames == vec_experimental_conditions and colnames == all.
@@ -151,21 +116,30 @@ if(char_PDP_df_source=="PD") {
   ## Collapse into comparison matrix
   mat_comparison_msstats <- do.call(rbind, list_mat_comparison_msstats)
   ## BOOM
+  ## Special condition for this experiment
+  mat_comparison_msstats <- mat_comparison_msstats[which(rowSums(mat_comparison_msstats)==0),]
 }
 
 #### Run groupComparison, the stats portion, of MSstats ####
 ## Run the differential analysis using MSstats
 list_DA_msstats <- MSstatsTMT::groupComparisonTMT(contrast.matrix = mat_comparison_msstats, data = list_MSstats_processed)
+# 
+# if(!file.exists("./data_images/24_01_13.RData")) {
+#   save.image("./data_images/24_01_13.RData")
+# }
 
-if(!file.exists("./data_images/24_01_13.RData")) {
-  save.image("./data_images/24_01_13.RData")
-}
+save.image(
+  paste0("./", format(Sys.time(), "%Y_%m_%d_%H_%M_%S"), "_IP.RData")
+)
 
 #### Also mrege in protein names, desc, etc. from UniProt ####
 df_up <- read.csv("uniprotkb_Human_AND_model_organism_9606_2024_10_21.tsv",header = T, na.strings = c(""), sep = "\t")
 names(df_up)[which(names(df_up)=="Entry")] <- "Protein"
-df_plot <- list_DA_msstats$ComparisonResult
-df_plot <- merge(df_up, df_plot, by = "Protein", all.y = T)
+df_plot_ip <- list_DA_msstats$ComparisonResult
+df_plot_ip <- merge(df_up, df_plot_ip, by = "Protein", all.y = T)
+
+#### Remove the KRT...
+df_plot_ip <- df_plot_ip[which(!grepl("Keratin, type ", df_plot_ip$Protein.names)),]
 
 ```
 
@@ -174,27 +148,122 @@ df_plot <- merge(df_up, df_plot, by = "Protein", all.y = T)
 Starting with volcano plots.
 
 ```{r}
+# df_plotme_ip <- df_plot_ip[grep(paste0("-", vec_control_conditions[1], "$"), df_plot_ip$Label), ]
+vec_conditions <- unique(df_plot_ip$Label)
+# df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label==vec_conditions[3]), ]
 
-vec_comparisons <- unique(df_plot$Label)
-df_plotme <- df_plot[which(df_plot$Label=="TRAF7_3nM-Control"), ]
-ggplotly(ggplot(data = df_plotme, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
-  geom_point() +
-  geom_hline(yintercept = -log10(0.05))
-)
+vec_genes_custom1 <- c(## CYTH4, RALYL, RAC1, RALY, WFIKKN1, EEF2, SLC25A48
+                      "Q9UIA0" , "Q86SE5", "P63000", "Q9UKM9", "Q96NZ8", "P13639", "Q6ZT89",
+                      ## TRAF7 and all KLFs
+                      "Q6Q0C0", 'Q13351', 'Q9Y5W3', "P57682", "O43474", "Q13887", "Q99612", "O75840", "O95600", "Q13886", "Q13118", "O14901", "Q9Y4X4", "Q9Y2Y9", "Q8TD94", "Q9UIH9", "Q9BXK1", "Q5JT82",  "A0A0U1RQI7",
+                      ## TRIM21 and MAP3K3 from Jaimeen
+                      "P19474", "Q99759", 
+                      ## also RHOB
+                      "P62745",
+                      ## also MEK5, MEKK2/3
+                      "Q13163", "Q9Y2U5", "Q99759"
+                      )
 
-df_linear <- df_plot[which(df_plot$Label=="TRAF7_3nM-Control" | df_plot$Label=="TRAF7_30nM-Control"), ]
-df_linear2 <- reshape(df_linear, idvar = "Protein", timevar = "Label", direction = "wide")
-ggplotly(
-  ggplot(data = df_linear2, aes(x = `log2FC.TRAF7_3nM-Control`, y = `log2FC.TRAF7_30nM-Control`, label = `Gene.Names..primary..TRAF7_3nM-Control`)) +
-    geom_point()
-)
+vec_genes_custom2 <- read.csv("./custom_list.csv", header = TRUE)
+
+vec_genes_custom <- c(vec_genes_custom1, vec_genes_custom2$Entry)
+
+#### Plot for Ab-Control
+df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="Ab-Control"), ]
+
+df_layer1 <- df_plotme_ip[which(df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer1$plot_color <- cbPalette[7]
+df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer2$plot_color <- cbPalette[1]
+# ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
+  ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
+ # )
+# summary(df_plot_ip$log2FC[which(is.finite(df_plot_ip$log2FC))])
+
+#### Plot for 03nm-Control
+df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="03nm-Control"), ]
+
+df_layer1 <- df_plotme_ip[which(df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer1$plot_color <- cbPalette[7]
+df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer2$plot_color <- cbPalette[1]
+# ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
+  ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
+
+#### Plot for 30nm-Control
+df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="30nm-Control"), ]
+
+df_layer1 <- df_plotme_ip[which(df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer1$plot_color <- cbPalette[7]
+df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer2$plot_color <- cbPalette[1]
+# ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
+  ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
+
+#### Plot for 03um-Control
+df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="03um-Control"), ]
+
+df_layer1 <- df_plotme_ip[which(df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer1$plot_color <- cbPalette[7]
+df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer2$plot_color <- cbPalette[1]
+# ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
+  ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
+
+# vec_comparisons <- unique(df_plot$Label)
+# df_plotme <- df_plot[which(df_plot$Label=="TRAF7_3nM-Control"), ]
+# ggplotly(ggplot(data = df_plotme, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+#   geom_point() +
+#   geom_hline(yintercept = -log10(0.05))
+# )
+# 
+# df_linear <- df_plot[which(df_plot$Label=="TRAF7_3nM-Control" | df_plot$Label=="TRAF7_30nM-Control"), ]
+# df_linear2 <- reshape(df_linear, idvar = "Protein", timevar = "Label", direction = "wide")
+# ggplotly(
+#   ggplot(data = df_linear2, aes(x = `log2FC.TRAF7_3nM-Control`, y = `log2FC.TRAF7_30nM-Control`, label = `Gene.Names..primary..TRAF7_3nM-Control`)) +
+#     geom_point()
+# )
 ```
+
+## IP line graphs
+We are interested in any TRAF7 complex members that associate or dissociate upon '1752 addition. Who are they?
+```{r}
+
+```
+
 
 ## Mary's Total Proteome
 
 Want to see if any native complex members are dissociating with compound addition.
 
-```{r}
 ```{r}
 
 #### Read in data from PDP ####
@@ -346,11 +415,33 @@ df_plot <- merge(df_up, df_plot, by = "Protein", all.y = T)
 
 Plot Mary's TP results.
 
+Consider rerunning as just control and treatment options? Think this may bolster stats. Treat 30nM tetrazine probe as treatment > 2nM, clear it has more of an effect than 2nM alone.
 ```{r}
-df_plotme <- df_plot[which(df_plot$Label=="C750-Control"), ]
-ggplotly(ggplot(data = df_plotme, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
-  geom_point() +
-  geom_hline(yintercept = -log10(0.05))
+df_plotme <- df_plot[which(df_plot$Label=="C010_probe-Control_probe"), ]
+
+vec_genes_custom <- c(## CYTH4, RALYL, RAC1, RALY, WFIKKN1, EEF2, SLC25A48
+                      "Q9UIA0" , "Q86SE5", "P63000", "Q9UKM9", "Q96NZ8", "P13639", "Q6ZT89",
+                      ## TRAF7 and all KLFs
+                      "Q6Q0C0", 'Q13351', 'Q9Y5W3', "P57682", "O43474", "Q13887", "Q99612", "O75840", "O95600", "Q13886", "Q13118", "O14901", "Q9Y4X4", "Q9Y2Y9", "Q8TD94", "Q9UIH9", "Q9BXK1", "Q5JT82",  "A0A0U1RQI7",
+                      ## TRIM21 and MAP3K3 from Jaimeen
+                      "P19474", "Q99759", 
+                      ## also RHOB
+                      "P62745",
+                      ## also MEK5, MEKK2/3
+                      "Q13163", "Q9Y2U5", "Q99759"
+                      )
+
+df_layer1 <- df_plotme[which(df_plotme$Protein %in% vec_genes_custom),]
+df_layer1$plot_color <- cbPalette[7]
+df_layer2 <- df_plotme[which(!df_plotme$Protein %in% vec_genes_custom),]
+df_layer2$plot_color <- cbPalette[1]
+
+ggplotly(ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
+     geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-3,3) +
+    ylim(0, 4)
 )
 ```
 

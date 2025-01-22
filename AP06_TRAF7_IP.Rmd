@@ -135,6 +135,9 @@ save.image(
 #### Also mrege in protein names, desc, etc. from UniProt ####
 df_up <- read.csv("uniprotkb_Human_AND_model_organism_9606_2024_10_21.tsv",header = T, na.strings = c(""), sep = "\t")
 names(df_up)[which(names(df_up)=="Entry")] <- "Protein"
+## we don't need all cols from uniprot
+df_up <- df_up[,c("Protein", "Protein.names", "Gene.Names",
+"Gene.Names..primary.")]
 df_plot_ip <- list_DA_msstats$ComparisonResult
 df_plot_ip <- merge(df_up, df_plot_ip, by = "Protein", all.y = T)
 
@@ -145,7 +148,7 @@ df_plot_ip <- df_plot_ip[which(!grepl("Keratin, type ", df_plot_ip$Protein.names
 
 ## Exploring processed data
 
-Starting with volcano plots.
+Starting with volcano plots. There are 1,104 proteins per comparison.
 
 ```{r}
 # df_plotme_ip <- df_plot_ip[grep(paste0("-", vec_control_conditions[1], "$"), df_plot_ip$Label), ]
@@ -253,16 +256,103 @@ ggplot() +
 # )
 ```
 
-## IP line graphs
-We are interested in any TRAF7 complex members that associate or dissociate upon '1752 addition. Who are they?
+We will NOT be using the conditions that were supplemented with compound. There seems to be a significant reduction of TRAF7 without addition of 3 nM, 30 nM, or 3 uM compound, so this seems difficult to interpret. Does the compound inhibit TRAF7 binding to the antibody? See top of report for note about immunogen region. See below:
 ```{r}
 
+#### Plot for 03um-Control
+df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="Ab-Ab_supp"), ]
+
+df_layer1 <- df_plotme_ip[which(df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer1$plot_color <- cbPalette[7]
+df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
+df_layer2$plot_color <- cbPalette[1]
+# ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
+  ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")")) +
+  ggtitle("TRAF7 (Ab) vs. TRAF7 with supplemented '1752 (Ab_supp)")
+```
+
+
+## IP line graphs
+
+We are interested in any TRAF7 complex members that associate or dissociate upon '1752 addition. Who are they? 5% FDR at 30 nM are highlighted in the line graph below. Scroll over for other proteins of interest.
+
+```{r}
+vec_conditions_of_interest <- c("Ab-Control", "03nm-Control", "30nm-Control", "03um-Control")
+df_line <- df_plot_ip[which(df_plot_ip$Label %in% vec_conditions_of_interest),]
+## we can remove some cols
+# df_line <- df_line[,c("Protein", "Protein.names", "Gene.Names", "Gene.Names..primary.", 
+# "Label", "log2FC", "adj.pvalue"
+# )]
+# df_line <- reshape(df_line, idvar = c("Protein", "Protein.names", "Gene.Names",
+# "Gene.Names..primary."), timevar = "Label", direction = "wide")
+
+## create the baseline per group
+
+# df_line <- ave(df_line$log2FC, df_line$Protein, FUN=function(x) x/max(x)) 
+list_helper <- vector("list", length = length(unique(df_line$Protein)))
+df_line$norm_to <- rep(NA, nrow(df_line))
+for (i in 1:length(unique(df_line$Protein))) {
+  a <- df_line[df_line$Protein==unique(df_line$Protein)[i],]
+  b <- a$log2FC[which(a$Label=="Ab-Control")]
+  list_helper[[i]] <- rep(b, 4)
+}
+df_line$norm_to <- unlist(list_helper)
+
+## create a value that basically shifts the Ab-Control condition to zero.
+df_line$adj_value <- df_line$log2FC - df_line$norm_to
+df_line$norm_val <- df_line$log2FC/df_line$norm_to
+
+df_line$Label <- factor(df_line$Label, levels =c("Ab-Control", "03nm-Control", "30nm-Control", "03um-Control"))
+
+
+## filter the df before you plot, some outlier values
+# df_line$keep_or_toss <- ave(df_line$adj.pvalue, df_line$Protein, FUN = function(x) ifelse(df_line$, "keep", "toss"))
+
+## Also create some criteria for inclusion. Looking for significant behavior that changes at the 3 or 30nm condition. What is happening at 3 uM? hmm
+
+## how to get value from each group, rather than using the loop above, https://stackoverflow.com/questions/34075793/dplyr-broadcasting-single-value-per-group-in-mutate
+# Find the value for the year 2000 for each category
+# value_2000 <- aggregate(value ~ category, data = data[data$year == 2000, ], FUN = function(x) x[1])
+
+# Merge the value_2000 back into the original data frame
+# data <- merge(data, value_2000, by = "category", suffixes = c("", "_2000"))
+
+# Rename the new column
+# names(data)[names(data) == "value_2000"] <- "value2"
+
+pval_30nm <- aggregate(adj.pvalue ~ Protein, data = df_line[df_line$Label == "30nm-Control", ], FUN = function(x) x[1])
+names(pval_30nm) <- c("Protein", "adj.pvalue_30nm")
+df_line <- merge(df_line, pval_30nm, by = "Protein", all.x = T)
+
+alpha_ip <- 0.05
+df_layer1 <- df_line[which(df_line$adj.pvalue_30nm < alpha_ip),]
+df_layer2 <- df_line[which(df_line$adj.pvalue_30nm > alpha_ip),]
+
+ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.5, color = cbPalette[1]) + 
+  geom_line(data = df_layer2, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.2, color = cbPalette[1]) +
+  geom_point(data = df_layer1, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.8, color = cbPalette[7]) + 
+  geom_line(data = df_layer1, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.5, color = cbPalette[7]) +
+  ggrepel::geom_label_repel(data = df_layer1, aes(x = Label, y = adj_value, label = Gene.Names..primary.), alpha = 0.8, color = cbPalette[7])
+  xlab("Condition" ) +
+  ylab("Normalized Log2FC")
+  )
+
+print(unique(df_layer1[,c("Protein", "Protein.names", "Gene.Names..primary.")]))
 ```
 
 
 ## Mary's Total Proteome
 
-Want to see if any native complex members are dissociating with compound addition.
+Is anything changing? Tough to interpret. 2 hour total treatment, and we have shown it's proteasome- and E1-independent. Perhaps pair with RNA-seq? Have captured RHOB and KLF2, likely MEF2 promoter region via ERK5 phosphorylating MEF2C.
 
 ```{r}
 
@@ -278,47 +368,6 @@ char_PDP_df_source <- "PD"
 
 #### Filtering and X to MSstats Format Conversion, Annotation file ####
 if (char_PDP_df_source == "PD") {
-  ## Building df_annot manually
-  ## Building the annotation file, df_annot, from PDP output "pools_export" file.
-  # df_pools <- read.csv("dummy.tsv", header = T, sep = "\t", na.strings = c("", "NA", "NaN", "NULL", "Null", "null", "na"))
-  # ## This is annotation df for TMT experiments 
-  # ## Create the start of a df_annot df to fill
-  # df_annot <- data.frame(
-  #   ## sample_channel == Channel
-  #   Channel = df_pools$sample_channel,
-  #   ## treatment/drug == Condition, needs to be sorted out below
-  #   Condition = rep(NA, length (df_pools$sample_channel)),
-  #   ## BioReplicate == df$num <- ave(df$val, df$cat, FUN = seq_along) from Condition
-  #   BioReplicate = rep(NA, length (df_pools$sample_channel)),
-  #   ## Number of technical replicates. This will be accommodated in the future.
-  #   TechRepMixture = rep(1, length(df_pools$sample_channel)),
-  #   ## Fraction == matches number of Spectrum.File
-  #   Fraction = rep(NA, length (df_pools$sample_channel)),
-  #   ## Mixture, likely is 1. This would be multiple TMT mixtures. Another case for future.
-  #   Mixture = rep(1, length (df_pools$sample_channel)),
-  #   ## Run will be matched to Spectrum.File
-  #   Run = rep(NA, length (df_pools$sample_channel))
-  # )
-  # ## Condition. For now, we can handle by drug/treatment columns
-  # ## if there is a value in treatment, but not in drugs, use treatment column
-  # df_annot$Condition <- ifelse(!is.na(df_pools$treatment) & is.na(df_pools$drug), df_pools$treatment, NA)
-  # ## if there is a value in drugs, but not treatment, use drugs
-  # df_annot$Condition <- ifelse(is.na(df_pools$treatment) & !is.na(df_pools$drug), df_pools$drug, df_annot$Condition)
-  # ## all remaining conditions should concatenate
-  # df_annot$Condition <- ifelse(is.na(df_annot$Condition), paste0(df_pools$treatment, ",",df_pools$drug), df_annot$Condition)
-  # 
-  # ## BioReplicate. We are assigning automatically based on "Condition", or "treatment" and "drug" from df_pools, but this can change if PDP has replicates entry.
-  # df_annot$BioReplicate <- ave(df_annot$Channel, df_annot$Condition, FUN = seq_along)
-  # ## repeat this the number of times * fractions/Spectrum.File
-  # df_annot <- do.call("rbind", replicate(length(unique(df_raw_from_PDP$Spectrum.File)), df_annot, simplify = FALSE))
-  # ## Fill in fraction number
-  # df_annot$Fraction <- rep(c(1:length(unique(df_raw_from_PDP$Spectrum.File))), each = length(unique(df_annot$Channel)))
-  # ## Add Spectrum.File for each fraction, in order
-  # vec_spectrum_files <- unique(df_raw_from_PDP$Spectrum.File)
-  # vec_spectrum_files <- vec_spectrum_files[order(nchar(vec_spectrum_files), vec_spectrum_files)]
-  # df_annot$Run <- rep(vec_spectrum_files, each = length(unique(df_annot$Channel)))
-  # ## save memory
-  # df_annot_precursor <- NULL
   df_annot <- read.csv("PD_annot_manual_TP.csv", header = T, sep = ",")
   df_annot <- do.call("rbind", replicate(length(unique(df_raw_from_PDP$Spectrum.File)), df_annot, simplify = FALSE))
   df_annot$TechRepMixture <- 1
@@ -331,6 +380,7 @@ if (char_PDP_df_source == "PD") {
   ## Run the MSstats converter. "Master.Protein.Accessions" is used for "ProteinName". "Sequence" and "Modifications" are used for "PeptideSequence". "Charge"
   list_quant <- MSstatsTMT::PDtoMSstatsTMTFormat(input = df_raw_from_PDP, 
                                                  annotation = df_annot, 
+                                                 which.proteinid = "Master.Protein.Accessions",
                                                  use_log_file = FALSE)
   ## save memory
   df_raw_from_PDP <- NULL
@@ -402,46 +452,83 @@ if(char_PDP_df_source=="PD") {
 ## Run the differential analysis using MSstats
 list_DA_msstats <- MSstatsTMT::groupComparisonTMT(contrast.matrix = mat_comparison_msstats, data = list_MSstats_processed)
 
-if(!file.exists("./data_images/24_01_13_TP.RData")) {
-  save.image("./data_images/24_01_13_TP.RData")
-}
+save.image(
+  paste0("./", format(Sys.time(), "%Y_%m_%d_%H_%M_%S"), "_IP.RData")
+)
 
 #### Also mrege in protein names, desc, etc. from UniProt ####
 df_up <- read.csv("uniprotkb_Human_AND_model_organism_9606_2024_10_21.tsv",header = T, na.strings = c(""), sep = "\t")
 names(df_up)[which(names(df_up)=="Entry")] <- "Protein"
-df_plot <- list_DA_msstats$ComparisonResult
-df_plot <- merge(df_up, df_plot, by = "Protein", all.y = T)
+## we don't need all cols from uniprot
+df_up <- df_up[,c("Protein", "Protein.names", "Gene.Names",
+"Gene.Names..primary.")]
+df_plot_tp <- list_DA_msstats$ComparisonResult
+df_plot_tp <- merge(df_up, df_plot_tp, by = "Protein", all.y = T)
+
+#### Remove the KRT...
+df_plot_tp <- df_plot_tp[which(!grepl("Keratin, type ", df_plot_tp$Protein.names)),]
 ```
 
 Plot Mary's TP results.
 
-Consider rerunning as just control and treatment options? Think this may bolster stats. Treat 30nM tetrazine probe as treatment > 2nM, clear it has more of an effect than 2nM alone.
+The conditions that we are interested in are 2, 10, and 750 nM. Nothing much is happening at 2 nM, which we would expect given the short timeline. Caution: treat 30nM tetrazine probe as treatment > 2nM, clear it has more of an effect than 2nM alone.
+
 ```{r}
-df_plotme <- df_plot[which(df_plot$Label=="C010_probe-Control_probe"), ]
+## Conditions are: C002_-Control, C010_-Control, C750_-Control
+alpha_tp <- 0.05
+## Plot for 2 nM
+df_plotme_tp <- df_plot_tp[which(df_plot_tp$Label=="C002-Control"), ]
 
-vec_genes_custom <- c(## CYTH4, RALYL, RAC1, RALY, WFIKKN1, EEF2, SLC25A48
-                      "Q9UIA0" , "Q86SE5", "P63000", "Q9UKM9", "Q96NZ8", "P13639", "Q6ZT89",
-                      ## TRAF7 and all KLFs
-                      "Q6Q0C0", 'Q13351', 'Q9Y5W3', "P57682", "O43474", "Q13887", "Q99612", "O75840", "O95600", "Q13886", "Q13118", "O14901", "Q9Y4X4", "Q9Y2Y9", "Q8TD94", "Q9UIH9", "Q9BXK1", "Q5JT82",  "A0A0U1RQI7",
-                      ## TRIM21 and MAP3K3 from Jaimeen
-                      "P19474", "Q99759", 
-                      ## also RHOB
-                      "P62745",
-                      ## also MEK5, MEKK2/3
-                      "Q13163", "Q9Y2U5", "Q99759"
-                      )
+df_layer1 <- df_plotme_tp[which(df_plotme_tp$Protein %in% vec_genes_custom),]
+df_layer2 <- df_plotme_tp[which(!df_plotme_tp$Protein %in% vec_genes_custom),]
 
-df_layer1 <- df_plotme[which(df_plotme$Protein %in% vec_genes_custom),]
-df_layer1$plot_color <- cbPalette[7]
-df_layer2 <- df_plotme[which(!df_plotme$Protein %in% vec_genes_custom),]
-df_layer2$plot_color <- cbPalette[1]
-
-ggplotly(ggplot() +
+# ggplotly(
+  ggplot() +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
      geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
   geom_hline(yintercept = -log10(0.05)) +
+   ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], max.overlaps = 50, force = 2, alpha = 0.6) +
+  geom_hline(yintercept = -log10(0.05)) +
     xlim(-3,3) +
     ylim(0, 4)
-)
+# )
+  
+## Plot for 10 nM
+df_plotme_tp <- df_plot_tp[which(df_plot_tp$Label=="C010-Control"), ]
+
+df_layer1 <- df_plotme_tp[which(df_plotme_tp$Protein %in% vec_genes_custom),]
+df_layer2 <- df_plotme_tp[which(!df_plotme_tp$Protein %in% vec_genes_custom),]
+
+# ggplotly(
+  ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
+     geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
+  geom_hline(yintercept = -log10(0.05)) +
+   ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], max.overlaps = 50, force = 2, alpha = 0.6) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-3,3) +
+    ylim(0, 4)
+# )
+  
+  ## Plot for 750 nM
+df_plotme_tp <- df_plot_tp[which(df_plot_tp$Label=="C750-Control"), ]
+
+df_layer1 <- df_plotme_tp[which(df_plotme_tp$Protein %in% vec_genes_custom),]
+df_layer1$plot_color <- "Custom gene list"
+df_layer2 <- df_plotme_tp[which(!df_plotme_tp$Protein %in% vec_genes_custom),]
+df_layer3 <- df_plotme_tp[which( df_plotme_tp$adj.pvalue < alpha_tp & !(df_plotme_tp$Protein %in% vec_genes_custom)),]
+df_layer3$plot_color <- "Significantly changing"
+df_layer4 <- rbind(df_layer1, df_layer3)
+# ggplotly(
+  ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
+     geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
+  geom_hline(yintercept = -log10(0.05)) +
+   ggrepel::geom_label_repel(data = df_layer4, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary., color = plot_color), max.overlaps = 50, force = 2, alpha = 0.6) +
+
+    xlim(-3,3) +
+    ylim(0, 4) +
+    scale_color_manual(values = c(cbPalette[7], cbPalette[1]))
+# )
 ```
 

@@ -8,17 +8,20 @@ output:
     code_folding: hide
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE
+                      , message = FALSE
+                      , warning = FALSE)
+
 ```
 
 ## MSstats for Kari and Jaimeen IP data
-Antibody is from Proteintech (?) Immunogen data says somewhere between 75-420, could be RING or Zinc-finger domains, the alpha helix, or barely beginning of the WD40 domain.
+EA.hy926 cells? Antibody is from Proteintech (?) Immunogen data says somewhere between 75-420, could be RING or Zinc-finger domains, the alpha helix, or barely beginning of the WD40 domain.
 
-```{r}
+```{r, echo = TRUE, message = FALSE, warning = FALSE, results = 'hide'}
 ## Data directly from Kari, PD TMT output
 #### Load required pacakges, MSstats ####
-list.of.packages <- c("MSstats", "MSstatsTMT", "ggplot2", "plotly", "ggrepel")
+list.of.packages <- c("MSstats", "MSstatsTMT", "ggplot2", "plotly", "ggrepel", "ggforce", "scales")
 ## installing instead in dockerfile specific versions
 lapply(list.of.packages, library, character.only = TRUE)
 cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
@@ -49,7 +52,8 @@ if (char_PDP_df_source == "PD") {
                                                  annotation = df_annot,
                                                  ## assigns "best" protein. Wonder how msstats handles this without. 
                                                  which.proteinid = "Master.Protein.Accessions",
-                                                 use_log_file = FALSE)
+                                                 use_log_file = FALSE,
+                                                 verbose = FALSE)
   ## save memory
   df_raw_from_PDP <- NULL
 
@@ -58,7 +62,8 @@ if (char_PDP_df_source == "PD") {
                                                        method = "msstats",
                                                        global_norm = TRUE,
                                                        MBimpute = FALSE, 
-                                                       use_log_file = FALSE)
+                                                       use_log_file = FALSE,
+                                                       verbose = FALSE)
   ## save memory, compost
   list_quant <- NULL
   ## need to hold onto the entire list_MSstats_processed for the groupComparison step later
@@ -122,7 +127,7 @@ if(char_PDP_df_source=="PD") {
 
 #### Run groupComparison, the stats portion, of MSstats ####
 ## Run the differential analysis using MSstats
-list_DA_msstats <- MSstatsTMT::groupComparisonTMT(contrast.matrix = mat_comparison_msstats, data = list_MSstats_processed)
+list_DA_msstats <- MSstatsTMT::groupComparisonTMT(contrast.matrix = mat_comparison_msstats, data = list_MSstats_processed, verbose = FALSE, use_log_file = FALSE)
 # 
 # if(!file.exists("./data_images/24_01_13.RData")) {
 #   save.image("./data_images/24_01_13.RData")
@@ -150,9 +155,10 @@ df_plot_ip <- df_plot_ip[which(!grepl("Keratin, type ", df_plot_ip$Protein.names
 
 Starting with volcano plots. There are 1,104 proteins per comparison.
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 # df_plotme_ip <- df_plot_ip[grep(paste0("-", vec_control_conditions[1], "$"), df_plot_ip$Label), ]
 vec_conditions <- unique(df_plot_ip$Label)
+alpha_ip <- 0.05
 # df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label==vec_conditions[3]), ]
 
 vec_genes_custom1 <- c(## CYTH4, RALYL, RAC1, RALY, WFIKKN1, EEF2, SLC25A48
@@ -175,15 +181,21 @@ vec_genes_custom <- c(vec_genes_custom1, vec_genes_custom2$Entry)
 df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="Ab-Control"), ]
 
 df_layer1 <- df_plotme_ip[which(df_plotme_ip$Protein %in% vec_genes_custom),]
-df_layer1$plot_color <- cbPalette[7]
+df_layer1$plot_color <- "Custom gene list"
 df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
-df_layer2$plot_color <- cbPalette[1]
+
+df_layer3 <- df_plotme_ip[which( df_plotme_ip$adj.pvalue < alpha_ip & !(df_plotme_ip$Protein %in% vec_genes_custom)),]
+df_layer3$plot_color <- "Significantly changing"
+df_layer4 <- rbind(df_layer1, df_layer3)
+
+
 # ggplotly(
 ggplot() +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
-  ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  ggrepel::geom_label_repel(data = df_layer4, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary., color = plot_color), max.overlaps = 50, force = 2, alpha = 0.6) +
   geom_hline(yintercept = -log10(0.05)) +
+  scale_color_manual(values = c(cbPalette[7], cbPalette[1]))+
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
@@ -194,15 +206,21 @@ ggplot() +
 df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="03nm-Control"), ]
 
 df_layer1 <- df_plotme_ip[which(df_plotme_ip$Protein %in% vec_genes_custom),]
-df_layer1$plot_color <- cbPalette[7]
+df_layer1$plot_color <- "Custom gene list"
 df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
-df_layer2$plot_color <- cbPalette[1]
+
+df_layer3 <- df_plotme_ip[which( df_plotme_ip$adj.pvalue < alpha_ip & !(df_plotme_ip$Protein %in% vec_genes_custom)),]
+df_layer3$plot_color <- "Significantly changing"
+df_layer4 <- rbind(df_layer1, df_layer3)
+
+
 # ggplotly(
 ggplot() +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
-  ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  ggrepel::geom_label_repel(data = df_layer4, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary., color = plot_color), max.overlaps = 50, force = 2, alpha = 0.6) +
   geom_hline(yintercept = -log10(0.05)) +
+  scale_color_manual(values = c(cbPalette[7], cbPalette[1]))+
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
@@ -211,15 +229,21 @@ ggplot() +
 df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="30nm-Control"), ]
 
 df_layer1 <- df_plotme_ip[which(df_plotme_ip$Protein %in% vec_genes_custom),]
-df_layer1$plot_color <- cbPalette[7]
+df_layer1$plot_color <- "Custom gene list"
 df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
-df_layer2$plot_color <- cbPalette[1]
+
+df_layer3 <- df_plotme_ip[which( df_plotme_ip$adj.pvalue < alpha_ip & !(df_plotme_ip$Protein %in% vec_genes_custom)),]
+df_layer3$plot_color <- "Significantly changing"
+df_layer4 <- rbind(df_layer1, df_layer3)
+
+
 # ggplotly(
 ggplot() +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
-  ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  ggrepel::geom_label_repel(data = df_layer4, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary., color = plot_color), max.overlaps = 50, force = 2, alpha = 0.6) +
   geom_hline(yintercept = -log10(0.05)) +
+  scale_color_manual(values = c(cbPalette[7], cbPalette[1]))+
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
@@ -228,15 +252,21 @@ ggplot() +
 df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="03um-Control"), ]
 
 df_layer1 <- df_plotme_ip[which(df_plotme_ip$Protein %in% vec_genes_custom),]
-df_layer1$plot_color <- cbPalette[7]
+df_layer1$plot_color <- "Custom gene list"
 df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
-df_layer2$plot_color <- cbPalette[1]
+
+df_layer3 <- df_plotme_ip[which( df_plotme_ip$adj.pvalue < alpha_ip & !(df_plotme_ip$Protein %in% vec_genes_custom)),]
+df_layer3$plot_color <- "Significantly changing"
+df_layer4 <- rbind(df_layer1, df_layer3)
+
+
 # ggplotly(
 ggplot() +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
-  ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
+  ggrepel::geom_label_repel(data = df_layer4, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary., color = plot_color), max.overlaps = 50, force = 2, alpha = 0.6) +
   geom_hline(yintercept = -log10(0.05)) +
+  scale_color_manual(values = c(cbPalette[7], cbPalette[1]))+
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
@@ -257,7 +287,7 @@ ggplot() +
 ```
 
 We will NOT be using the conditions that were supplemented with compound. There seems to be a significant reduction of TRAF7 without addition of 3 nM, 30 nM, or 3 uM compound, so this seems difficult to interpret. Does the compound inhibit TRAF7 binding to the antibody? See top of report for note about immunogen region. See below:
-```{r}
+```{r, message = FALSE, warning = FALSE}
 
 #### Plot for 03um-Control
 df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="Ab-Ab_supp"), ]
@@ -268,10 +298,10 @@ df_layer2 <- df_plotme_ip[which(!df_plotme_ip$Protein %in% vec_genes_custom),]
 df_layer2$plot_color <- cbPalette[1]
 # ggplotly(
 ggplot() +
+  geom_hline(yintercept = -log10(0.05)) +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
   ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.)) +
-  geom_hline(yintercept = -log10(0.05)) +
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")")) +
@@ -283,7 +313,7 @@ ggplot() +
 
 We are interested in any TRAF7 complex members that associate or dissociate upon '1752 addition. Who are they? 5% FDR at 30 nM are highlighted in the line graph below. Scroll over for other proteins of interest.
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 vec_conditions_of_interest <- c("Ab-Control", "03nm-Control", "30nm-Control", "03um-Control")
 df_line <- df_plot_ip[which(df_plot_ip$Label %in% vec_conditions_of_interest),]
 ## we can remove some cols
@@ -331,7 +361,7 @@ pval_30nm <- aggregate(adj.pvalue ~ Protein, data = df_line[df_line$Label == "30
 names(pval_30nm) <- c("Protein", "adj.pvalue_30nm")
 df_line <- merge(df_line, pval_30nm, by = "Protein", all.x = T)
 
-alpha_ip <- 0.05
+
 df_layer1 <- df_line[which(df_line$adj.pvalue_30nm < alpha_ip),]
 df_layer2 <- df_line[which(df_line$adj.pvalue_30nm > alpha_ip),]
 
@@ -341,20 +371,20 @@ ggplot() +
   geom_line(data = df_layer2, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.2, color = cbPalette[1]) +
   geom_point(data = df_layer1, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.8, color = cbPalette[7]) + 
   geom_line(data = df_layer1, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.5, color = cbPalette[7]) +
-  ggrepel::geom_label_repel(data = df_layer1, aes(x = Label, y = adj_value, label = Gene.Names..primary.), alpha = 0.8, color = cbPalette[7])
+  ggrepel::geom_label_repel(data = df_layer1, aes(x = Label, y = adj_value, label = Gene.Names..primary.), alpha = 0.8, color = cbPalette[7]) +
   xlab("Condition" ) +
   ylab("Normalized Log2FC")
   )
 
-print(unique(df_layer1[,c("Protein", "Protein.names", "Gene.Names..primary.")]))
+knitr::kable((unique(df_layer1[,c("Protein", "Protein.names", "Gene.Names..primary.")])))
 ```
 
 
 ## Mary's Total Proteome
 
-Is anything changing? Tough to interpret. 2 hour total treatment, and we have shown it's proteasome- and E1-independent. Perhaps pair with RNA-seq? Have captured RHOB and KLF2, likely MEF2 promoter region via ERK5 phosphorylating MEF2C.
+EA.hy926 cells. Is anything changing? Tough to interpret. 2 hour total treatment, and we have shown it's proteasome- and E1-independent. Perhaps pair with RNA-seq? Have captured RHOB and KLF2, likely MEF2 promoter region via ERK5 phosphorylating MEF2C.
 
-```{r}
+```{r, echo = TRUE, message = FALSE, warning = FALSE, results = 'hide'}
 
 #### Read in data from PDP ####
 ## Data table to be passed from PDP
@@ -381,7 +411,8 @@ if (char_PDP_df_source == "PD") {
   list_quant <- MSstatsTMT::PDtoMSstatsTMTFormat(input = df_raw_from_PDP, 
                                                  annotation = df_annot, 
                                                  which.proteinid = "Master.Protein.Accessions",
-                                                 use_log_file = FALSE)
+                                                 use_log_file = FALSE,
+                                                 verbose = FALSE)
   ## save memory
   df_raw_from_PDP <- NULL
 
@@ -390,15 +421,16 @@ if (char_PDP_df_source == "PD") {
                                                        method = "msstats",
                                                        global_norm = TRUE,
                                                        MBimpute = FALSE, 
-                                                       use_log_file = FALSE)
+                                                       use_log_file = FALSE,
+                                                       verbose = FALSE)
   ## save memory, compost
   list_quant <- NULL
   ## need to hold onto the entire list_MSstats_processed for the groupComparison step later
   
   ## some PD TMT plots. Might be useful integration eventually.
-  dataProcessPlotsTMT(data = list_MSstats_processed, type = "QCplot", which.Protein = "allonly", width = 21, height = 7)
+  # dataProcessPlotsTMT(data = list_MSstats_processed, type = "QCplot", which.Protein = "allonly", width = 21, height = 7)
   ## This is nice for peptide level analysis!
-  dataProcessPlotsTMT(data = list_MSstats_processed, type = "ProfilePlot", which.Protein = 1, width = 21, height = 7)
+  # dataProcessPlotsTMT(data = list_MSstats_processed, type = "ProfilePlot", which.Protein = 1, width = 21, height = 7)
 }
 
 if(char_PDP_df_source=="PD") {
@@ -450,7 +482,7 @@ if(char_PDP_df_source=="PD") {
 
 #### Run groupComparison, the stats portion, of MSstats ####
 ## Run the differential analysis using MSstats
-list_DA_msstats <- MSstatsTMT::groupComparisonTMT(contrast.matrix = mat_comparison_msstats, data = list_MSstats_processed)
+list_DA_msstats <- MSstatsTMT::groupComparisonTMT(contrast.matrix = mat_comparison_msstats, data = list_MSstats_processed, verbose = FALSE, use_log_file = FALSE)
 
 save.image(
   paste0("./", format(Sys.time(), "%Y_%m_%d_%H_%M_%S"), "_IP.RData")
@@ -473,41 +505,53 @@ Plot Mary's TP results.
 
 The conditions that we are interested in are 2, 10, and 750 nM. Nothing much is happening at 2 nM, which we would expect given the short timeline. Caution: treat 30nM tetrazine probe as treatment > 2nM, clear it has more of an effect than 2nM alone.
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 ## Conditions are: C002_-Control, C010_-Control, C750_-Control
 alpha_tp <- 0.05
 ## Plot for 2 nM
 df_plotme_tp <- df_plot_tp[which(df_plot_tp$Label=="C002-Control"), ]
 
 df_layer1 <- df_plotme_tp[which(df_plotme_tp$Protein %in% vec_genes_custom),]
+df_layer1$plot_color <- "Custom gene list"
 df_layer2 <- df_plotme_tp[which(!df_plotme_tp$Protein %in% vec_genes_custom),]
-
+df_layer3 <- df_plotme_tp[which( df_plotme_tp$adj.pvalue < alpha_tp & !(df_plotme_tp$Protein %in% vec_genes_custom)),]
+df_layer3$plot_color <- "Significantly changing"
+df_layer4 <- rbind(df_layer1, df_layer3)
 # ggplotly(
   ggplot() +
+     geom_hline(yintercept = -log10(0.05), alpha = 0.5) +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
      geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
-  geom_hline(yintercept = -log10(0.05)) +
-   ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], max.overlaps = 50, force = 2, alpha = 0.6) +
-  geom_hline(yintercept = -log10(0.05)) +
+   ggrepel::geom_label_repel(data = df_layer4, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary., color = plot_color), max.overlaps = 50, force = 2, alpha = 0.6) +
+
     xlim(-3,3) +
-    ylim(0, 4)
+    ylim(0, 4) +
+    scale_color_manual(values = c(cbPalette[7], cbPalette[1])) + 
+    xlab("Log2FC(2nM/Control)") +
+    ggtitle("TRAF7 IP + 2 nM '1752")
 # )
   
 ## Plot for 10 nM
 df_plotme_tp <- df_plot_tp[which(df_plot_tp$Label=="C010-Control"), ]
 
 df_layer1 <- df_plotme_tp[which(df_plotme_tp$Protein %in% vec_genes_custom),]
+df_layer1$plot_color <- "Custom gene list"
 df_layer2 <- df_plotme_tp[which(!df_plotme_tp$Protein %in% vec_genes_custom),]
-
+df_layer3 <- df_plotme_tp[which( df_plotme_tp$adj.pvalue < alpha_tp & !(df_plotme_tp$Protein %in% vec_genes_custom)),]
+df_layer3$plot_color <- "Significantly changing"
+df_layer4 <- rbind(df_layer1, df_layer3)
 # ggplotly(
   ggplot() +
+     geom_hline(yintercept = -log10(0.05), alpha = 0.5) +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
      geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
-  geom_hline(yintercept = -log10(0.05)) +
-   ggrepel::geom_label_repel(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], max.overlaps = 50, force = 2, alpha = 0.6) +
-  geom_hline(yintercept = -log10(0.05)) +
+   ggrepel::geom_label_repel(data = df_layer4, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary., color = plot_color), max.overlaps = 50, force = 2, alpha = 0.6) +
+
     xlim(-3,3) +
-    ylim(0, 4)
+    ylim(0, 4) +
+    scale_color_manual(values = c(cbPalette[7], cbPalette[1])) + 
+    xlab("Log2FC(10nM/Control)") +
+    ggtitle("TRAF7 IP + 10 nM '1752")
 # )
   
   ## Plot for 750 nM
@@ -521,14 +565,288 @@ df_layer3$plot_color <- "Significantly changing"
 df_layer4 <- rbind(df_layer1, df_layer3)
 # ggplotly(
   ggplot() +
+     geom_hline(yintercept = -log10(0.05), alpha = 0.5) +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[1], alpha = 0.3) +
      geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary.), color = cbPalette[7], alpha = 0.95) +
-  geom_hline(yintercept = -log10(0.05)) +
    ggrepel::geom_label_repel(data = df_layer4, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary., color = plot_color), max.overlaps = 50, force = 2, alpha = 0.6) +
 
     xlim(-3,3) +
     ylim(0, 4) +
-    scale_color_manual(values = c(cbPalette[7], cbPalette[1]))
+    scale_color_manual(values = c(cbPalette[7], cbPalette[1])) + 
+    xlab("Log2FC(750nM/Control)") +
+    ggtitle("TRAF7 IP + 750 nM '1752")
 # )
+```
+
+## Mary's SEC data
+
+EA.hy926 cell lysates. Caveat is that this is performed on lysate. EA.hy926 cells (DMSO or 10 nM PF-08031752 for 4 h). No benzonase. "How would the KLF2 activator (1752) change proteoin complexes?" 5,222 total proteins with at least 2 unique peptides. KLF2 not quantified. Lazear et al. 2023 (Cravatt lab) uses an SEC cutoff of 30. 
+```{r}
+## Read in SEC/PCP data
+## This has already been processed by a custom software from the Lazear et al. 2023 paper. Read it in directly.
+df_precursor_se <- read.csv("KLF2_PCP_Stats_121724 (1).csv", header = T, na.strings = c("", "NA", "NaN", "NULL", "Null", "null", "na"))
+## merge with df_up so we can use the correct Protein ID for Venn Diagram
+# View(df_precursor_se[which(duplicated(df_precursor_se$PG.ProteinNames, fromLast = T) | duplicated(df_precursor_se$PG.ProteinNames, fromLast = F) ),])
+## What to do with duplicates? These are quantified, but different isoforms. Only 3 that have scores > 30, so just throw them out for now. Keep the proteins that are not isoforms, throw out those that are.
+
+df_precursor_se_dups <- df_precursor_se[which(duplicated(df_precursor_se$PG.ProteinNames, fromLast = T) | duplicated(df_precursor_se$PG.ProteinNames, fromLast = F) ),]
+df_precursor_se_rest <- df_precursor_se[which(!df_precursor_se$PG.ProteinNames %in% df_precursor_se_dups$PG.ProteinNames),]
+## Keep dups that do not have an isoform indicated
+df_precursor_se_dups <- df_precursor_se_dups[which(!grepl("-", df_precursor_se_dups$PG.ProteinGroups)),]
+## check these are unique
+# sum(duplicated(df_precursor_se_dups$PG.ProteinGroups))
+df_precursor_se <- rbind(df_precursor_se_rest, df_precursor_se_dups)
+## lost 61 proteins total, all isoforms.
+df_precursor_se_dups <- NULL
+df_precursor_se_rest <- NULL
+
+df_up <- read.csv("uniprotkb_Human_AND_model_organism_9606_2024_10_21.tsv",header = T, na.strings = c(""), sep = "\t")
+names(df_up)[which(names(df_up)=="Entry")] <- "Protein"
+## we don't need all cols from uniprot
+df_up <- df_up[,c("Protein", "Entry.Name", "Protein.names", "Gene.Names",
+"Gene.Names..primary.")]
+
+df_precursor_se$Entry.Name <- gsub(";.*", "", df_precursor_se$PG.ProteinNames)
+
+df_plot_se <- merge(df_up, df_precursor_se, by = "Entry.Name", all.y = T)
+
+## Some NA values, guess UniProt names are not updated in older PD. 
+df_plot_se1 <- df_plot_se[which(is.na(df_plot_se$Protein)),]
+df_plot_se2 <- df_plot_se[which(!df_plot_se$Entry.Name %in% df_plot_se1$Entry.Name),]
+
+df_plot_se1$Protein <- gsub("-.*|;.*","", df_plot_se1$PG.ProteinGroups)
+df_plot_se1[,c("Protein.names", "Gene.Names", "Gene.Names..primary.")] <- NULL
+names(df_plot_se1)[which(names(df_plot_se1)=="Entry.Name")] <- "Entry.Name.dep"
+
+df_plot_se1 <- merge(df_up, df_plot_se1, by = "Protein")
+## can see all the Entry Names don't match, are old names.
+
+df_plot_se1$Entry.Name.dep <- NULL
+
+df_plot_se <- rbind(df_plot_se1, df_plot_se2)
+
+## also, we don't need all these columns.
+df_plot_se <- df_plot_se[,c("Protein", "Entry.Name", "Protein.names", "Gene.Names", "Gene.Names..primary.", 
+"PG.MolecularWeight", "PG.ProteinGroups", "PG.Genes", "PG.ProteinDescriptions", 
+"PG.ProteinNames", "PG.NrOfStrippedSequencesIdentified..Experiment.wide.", 
+"DMSO1Fx1", "DMSO1Fx2", "DMSO1Fx3", "DMSO1Fx4", "DMSO1Fx5", "DMSO1Fx6", 
+"DMSO2Fx1", "DMSO2Fx2", "DMSO2Fx3", "DMSO2Fx4", "DMSO2Fx5", "DMSO2Fx6", 
+"Cpd1Fx1", "Cpd1Fx2", "Cpd1Fx3", "Cpd1Fx4", "Cpd1Fx5", "Cpd1Fx6", 
+"Cpd2Fx1", "Cpd2Fx2", "Cpd2Fx3", "Cpd2Fx4", "Cpd2Fx5", "Cpd2Fx6", "Score")]
+
+## remove the helpers
+df_plot_se1 <- NULL
+df_plot_se2 <- NULL
+df_precursor_se <- NULL
+df_precursor_se_dups <- NULL
+df_precursor_se_rest <- NULL
+```
+Let's choose a practical score cutoff. What does this distribution look like?
+```{r}
+## Top 10%
+quantile(df_plot_se$Score, 0.9)
+quantile(df_plot_se$Score, 0.95)
+quantile(df_plot_se$Score, 0.99)
+
+ggplot(data = df_plot_se, aes(x = Score)) +
+  geom_histogram(fill = "lightgray", color = "black", binwidth = 10) +
+  geom_vline(xintercept = quantile(df_plot_se$Score, 0.95), linetype = "dotted", color = cbPalette[7], size = 1) +
+  ggforce::facet_zoom(ylim = c(0,100), zoom.size = 1) +
+  scale_x_continuous(breaks = seq(from = 0, to = 150, by = 10))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggtitle("Histogram of SEC Scores. Dotted line at 95 percentile.")
+  
+```
+95 percentile looks reasonable, though much lower than Cravatt score cutoff of >30. Let's overlap the SEC data with the interactome data. Color scale can be the SEC score. 
+```{r}
+## Can we use Protein column as ID? yes
+# sum(duplicated(df_plot_se$Protein))
+
+## Only the non-supp conditions
+df_ip_se <- merge(df_plot_ip[which(!grepl("supp", df_plot_ip$Label)),], df_plot_se, by = "Protein")
+myscaler <- function(x, from, to) {
+  high=quantile(df_plotme_ip_se$Score, 0.95)
+  low=0
+  ifelse(x<low,0,ifelse(x>high,1,(x-low)/(high-low)))
+}
+
+#### Plot for Ab-Control
+df_plotme_ip_se <- df_ip_se[which(df_ip_se$Label=="Ab-Control"), ]
+
+## Set quantile level for upper points
+df_layer1 <- df_plotme_ip_se[which(df_plotme_ip_se$Score > quantile(df_plotme_ip_se$Score, 0.95)),]
+# df_layer1$plot_color <- "Custom gene list"
+df_layer2 <- df_plotme_ip_se[which(!df_plotme_ip_se$Protein %in% df_layer1$Protein),]
+
+## create df_layer3 for custom_gene_list and df_layer1 labels
+df_layer3 <- rbind(
+  ## layer1 needs to shed a few for labels to fit in static plot
+  df_layer1[which(df_layer1$adj.pvalue < 0.5),],
+  df_plotme_ip_se[which( df_plotme_ip_se$Protein %in% vec_genes_custom),]
+)
+## remove dups in case something falls in both
+df_layer3 <- unique(df_layer3)
+df_layer3$plot_label <- paste0(df_layer3$Gene.Names..primary..x, "\n", round(df_layer3$Score, 2))
+# df_layer3 <- df_plotme_ip_se[which( df_plotme_ip_se$adj.pvalue < alpha_ip & !(df_plotme_ip_se$Protein %in% vec_genes_custom)),]
+# df_layer3$plot_color <- "Significantly changing"
+# df_layer4 <- rbind(df_layer1, df_layer3)
+
+
+# ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
+   ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.6, size = 4) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
+  scale_color_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  scale_fill_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  guides(fill = "none") +
+  ggtitle(paste0(
+    "IP of ", unique(df_plotme_ip_se$Label), ", colored by SEC score"
+    )
+  )
+ # )
+
+
+#### Plot for 03nm-Control
+df_plotme_ip_se <- df_ip_se[which(df_ip_se$Label=="03nm-Control"), ]
+
+## Set quantile level for upper points
+df_layer1 <- df_plotme_ip_se[which(df_plotme_ip_se$Score > quantile(df_plotme_ip_se$Score, 0.95)),]
+# df_layer1$plot_color <- "Custom gene list"
+df_layer2 <- df_plotme_ip_se[which(!df_plotme_ip_se$Protein %in% df_layer1$Protein),]
+
+## create df_layer3 for custom_gene_list and df_layer1 labels
+df_layer3 <- rbind(
+  ## layer1 needs to shed a few for labels to fit in static plot
+  df_layer1[which(df_layer1$adj.pvalue < 0.2),],
+  df_plotme_ip_se[which( df_plotme_ip_se$Protein %in% vec_genes_custom),]
+)
+## remove dups in case something falls in both
+df_layer3 <- unique(df_layer3)
+df_layer3$plot_label <- paste0(df_layer3$Gene.Names..primary..x, "\n", round(df_layer3$Score, 2))
+# df_layer3 <- df_plotme_ip_se[which( df_plotme_ip_se$adj.pvalue < alpha_ip & !(df_plotme_ip_se$Protein %in% vec_genes_custom)),]
+# df_layer3$plot_color <- "Significantly changing"
+# df_layer4 <- rbind(df_layer1, df_layer3)
+
+
+# ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
+   ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.8, size = 4) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
+  scale_color_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  scale_fill_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  guides(fill = "none") +
+  ggtitle(paste0(
+    "IP of ", unique(df_plotme_ip_se$Label), ", colored by SEC score"
+    )
+  )
+ # )
+
+
+#### Plot for 30nm-Control
+df_plotme_ip_se <- df_ip_se[which(df_ip_se$Label=="30nm-Control"), ]
+
+## Set quantile level for upper points
+df_layer1 <- df_plotme_ip_se[which(df_plotme_ip_se$Score > quantile(df_plotme_ip_se$Score, 0.95)),]
+# df_layer1$plot_color <- "Custom gene list"
+df_layer2 <- df_plotme_ip_se[which(!df_plotme_ip_se$Protein %in% df_layer1$Protein),]
+
+## create df_layer3 for custom_gene_list and df_layer1 labels
+df_layer3 <- rbind(
+  ## layer1 needs to shed a few for labels to fit in static plot
+  df_layer1[which(df_layer1$adj.pvalue < 0.1),],
+  df_plotme_ip_se[which( df_plotme_ip_se$Protein %in% vec_genes_custom),]
+)
+## remove dups in case something falls in both
+df_layer3 <- unique(df_layer3)
+df_layer3$plot_label <- paste0(df_layer3$Gene.Names..primary..x, "\n", round(df_layer3$Score, 2))
+# df_layer3 <- df_plotme_ip_se[which( df_plotme_ip_se$adj.pvalue < alpha_ip & !(df_plotme_ip_se$Protein %in% vec_genes_custom)),]
+# df_layer3$plot_color <- "Significantly changing"
+# df_layer4 <- rbind(df_layer1, df_layer3)
+
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
+   ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.75, size = 4) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
+  scale_color_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  scale_fill_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  guides(fill = "none") +
+  ggtitle(paste0(
+    "IP of ", unique(df_plotme_ip_se$Label), ", colored by SEC score"
+    )
+  )
+
+ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
+   ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.75, size = 4) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
+  scale_color_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  scale_fill_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  guides(fill = "none") +
+  ggtitle(paste0(
+    "INTERACTIVE: IP of ", unique(df_plotme_ip_se$Label), ", colored by SEC score"
+    )
+  )
+)
+
+
+#### Plot for 03um-Control
+df_plotme_ip_se <- df_ip_se[which(df_ip_se$Label=="03um-Control"), ]
+
+## Set quantile level for upper points
+df_layer1 <- df_plotme_ip_se[which(df_plotme_ip_se$Score > quantile(df_plotme_ip_se$Score, 0.95)),]
+# df_layer1$plot_color <- "Custom gene list"
+df_layer2 <- df_plotme_ip_se[which(!df_plotme_ip_se$Protein %in% df_layer1$Protein),]
+
+## create df_layer3 for custom_gene_list and df_layer1 labels
+df_layer3 <- rbind(
+  ## layer1 needs to shed a few for labels to fit in static plot
+  df_layer1[which(df_layer1$adj.pvalue < 0.5),],
+  df_plotme_ip_se[which( df_plotme_ip_se$Protein %in% vec_genes_custom),]
+)
+## remove dups in case something falls in both
+df_layer3 <- unique(df_layer3)
+df_layer3$plot_label <- paste0(df_layer3$Gene.Names..primary..x, "\n", round(df_layer3$Score, 2))
+# df_layer3 <- df_plotme_ip_se[which( df_plotme_ip_se$adj.pvalue < alpha_ip & !(df_plotme_ip_se$Protein %in% vec_genes_custom)),]
+# df_layer3$plot_color <- "Significantly changing"
+# df_layer4 <- rbind(df_layer1, df_layer3)
+
+
+# ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
+  geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
+   ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.75, size = 4) +
+  geom_hline(yintercept = -log10(0.05)) +
+    xlim(-5,8) +
+    ylim(0, 3) +
+    xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
+  scale_color_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  scale_fill_viridis_c(rescaler = myscaler, end = 0.85, option = "magma") +
+  guides(fill = "none") +
+  ggtitle(paste0(
+    "IP of ", unique(df_plotme_ip_se$Label), ", colored by SEC score"
+    )
+  )
+ # )
+
 ```
 

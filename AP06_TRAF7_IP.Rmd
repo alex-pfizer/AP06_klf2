@@ -15,8 +15,9 @@ knitr::opts_chunk$set(echo = TRUE
 
 ```
 
-## MSstats for Kari and Jaimeen IP data
-EA.hy926 cells? Antibody is from Proteintech (?) Immunogen data says somewhere between 75-420, could be RING or Zinc-finger domains, the alpha helix, or barely beginning of the WD40 domain.
+## Analyzing Jaimeen and Kari IP data with MSstats
+
+EA.hy926 cells? Antibody is from Proteintech (?) Immunogen data says somewhere between 75-420, could be RING or Zinc-finger domains, the alpha helix, or barely beginning of the WD40 domain. MSstats processing.
 
 ```{r, echo = TRUE, message = FALSE, warning = FALSE, results = 'hide'}
 ## Data directly from Kari, PD TMT output
@@ -151,9 +152,11 @@ df_plot_ip <- df_plot_ip[which(!grepl("Keratin, type ", df_plot_ip$Protein.names
 
 ```
 
-## Exploring processed data
+#### Exploring processed IP data
 
-Starting with volcano plots. There are 1,104 proteins per comparison.
+Starting with volcano plots. There are 1,104 proteins per comparison. We have highlighted either genes from a "genes of interest" custom list (red-orange) and anything significant at the 5% FDR level (horizontal line). The sources for candidate complex members below are from [BioPlex](https://bioplex.hms.harvard.edu/explorer/) and [huMAP 3.0](https://www.biorxiv.org/content/10.1101/2024.10.11.617930v1). If you don't see your favorite gene, let Alex know.
+
+Custom gene list:
 
 ```{r, message = FALSE, warning = FALSE}
 # df_plotme_ip <- df_plot_ip[grep(paste0("-", vec_control_conditions[1], "$"), df_plot_ip$Label), ]
@@ -177,6 +180,9 @@ vec_genes_custom2 <- read.csv("./custom_list.csv", header = TRUE)
 
 vec_genes_custom <- c(vec_genes_custom1, vec_genes_custom2$Entry)
 
+df_custom_genes <- read.csv("custom_list_df.csv", header = T)
+knitr::kable(df_custom_genes)
+
 #### Plot for Ab-Control
 df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="Ab-Control"), ]
 
@@ -198,7 +204,8 @@ ggplot() +
   scale_color_manual(values = c(cbPalette[7], cbPalette[1]))+
     xlim(-5,8) +
     ylim(0, 3) +
-    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
+    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")")) +
+  ggtitle("TRAF7 (no '1752) vs. Control IgG")
  # )
 # summary(df_plot_ip$log2FC[which(is.finite(df_plot_ip$log2FC))])
 
@@ -223,7 +230,8 @@ ggplot() +
   scale_color_manual(values = c(cbPalette[7], cbPalette[1]))+
     xlim(-5,8) +
     ylim(0, 3) +
-    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
+    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))+
+  ggtitle("TRAF7 + 3nM '1752 vs. Control IgG")
 
 #### Plot for 30nm-Control
 df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="30nm-Control"), ]
@@ -246,7 +254,8 @@ ggplot() +
   scale_color_manual(values = c(cbPalette[7], cbPalette[1]))+
     xlim(-5,8) +
     ylim(0, 3) +
-    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
+    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))+
+  ggtitle("TRAF7 + 30nM '1752 vs. Control IgG")
 
 #### Plot for 03um-Control
 df_plotme_ip <- df_plot_ip[which(df_plot_ip$Label=="03um-Control"), ]
@@ -269,7 +278,8 @@ ggplot() +
   scale_color_manual(values = c(cbPalette[7], cbPalette[1]))+
     xlim(-5,8) +
     ylim(0, 3) +
-    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))
+    xlab(paste0("Log2FC(", unique(df_plotme_ip$Label), ")"))+
+  ggtitle("TRAF7 + 3uM '1752 vs. Control IgG")
 
 # vec_comparisons <- unique(df_plot$Label)
 # df_plotme <- df_plot[which(df_plot$Label=="TRAF7_3nM-Control"), ]
@@ -309,9 +319,11 @@ ggplot() +
 ```
 
 
-## IP line graphs
+#### IP line graphs
 
-We are interested in any TRAF7 complex members that associate or dissociate upon '1752 addition. Who are they? 5% FDR at 30 nM are highlighted in the line graph below. Scroll over for other proteins of interest.
+We are interested in any TRAF7 complex members that associate or dissociate upon '1752 addition. Who are they?
+
+The first condition, Ab-Control, is the baseline (TRAF7 pulldown, no '1752, over IgG). The y-axis indicates the differences in Log2FC as '1752 concentration increases. As the line trends positively, this indicates an increased abundance in the IP as '1752 concentration increases. A positive trend may indicate a TRAF7 complex member that is associating more with '1752. A negative trend may indicate a dissociating TRAF7 complex member. Any protein that is significantly changing at the 5% FDR at 30 nM dosage as compared to IgG control are highlighted in the line graph below. They are also shown in the table below the graph.
 
 ```{r, message = FALSE, warning = FALSE}
 vec_conditions_of_interest <- c("Ab-Control", "03nm-Control", "30nm-Control", "03um-Control")
@@ -382,7 +394,7 @@ knitr::kable((unique(df_layer1[,c("Protein", "Protein.names", "Gene.Names..prima
 
 ## Mary's Total Proteome
 
-EA.hy926 cells. Is anything changing? Tough to interpret. 2 hour total treatment, and we have shown it's proteasome- and E1-independent. Perhaps pair with RNA-seq? Have captured RHOB and KLF2, likely MEF2 promoter region via ERK5 phosphorylating MEF2C.
+EA.hy926 cells dosed with 2, 10, and 750 nM '1752 for 2 hours. Is anything changing? We have shown it's proteasome- and E1-independent. 
 
 ```{r, echo = TRUE, message = FALSE, warning = FALSE, results = 'hide'}
 
@@ -514,9 +526,9 @@ df_plotme_tp <- df_plot_tp[which(df_plot_tp$Label=="C002-Control"), ]
 df_layer1 <- df_plotme_tp[which(df_plotme_tp$Protein %in% vec_genes_custom),]
 df_layer1$plot_color <- "Custom gene list"
 df_layer2 <- df_plotme_tp[which(!df_plotme_tp$Protein %in% vec_genes_custom),]
-df_layer3 <- df_plotme_tp[which( df_plotme_tp$adj.pvalue < alpha_tp & !(df_plotme_tp$Protein %in% vec_genes_custom)),]
-df_layer3$plot_color <- "Significantly changing"
-df_layer4 <- rbind(df_layer1, df_layer3)
+# df_layer3 <- df_plotme_tp[which( df_plotme_tp$adj.pvalue < alpha_tp & !(df_plotme_tp$Protein %in% vec_genes_custom)),]
+# df_layer3$plot_color <- "Significantly changing"
+df_layer4 <- df_layer1
 # ggplotly(
   ggplot() +
      geom_hline(yintercept = -log10(0.05), alpha = 0.5) +
@@ -537,9 +549,9 @@ df_plotme_tp <- df_plot_tp[which(df_plot_tp$Label=="C010-Control"), ]
 df_layer1 <- df_plotme_tp[which(df_plotme_tp$Protein %in% vec_genes_custom),]
 df_layer1$plot_color <- "Custom gene list"
 df_layer2 <- df_plotme_tp[which(!df_plotme_tp$Protein %in% vec_genes_custom),]
-df_layer3 <- df_plotme_tp[which( df_plotme_tp$adj.pvalue < alpha_tp & !(df_plotme_tp$Protein %in% vec_genes_custom)),]
-df_layer3$plot_color <- "Significantly changing"
-df_layer4 <- rbind(df_layer1, df_layer3)
+# df_layer3 <- df_plotme_tp[which( df_plotme_tp$adj.pvalue < alpha_tp & !(df_plotme_tp$Protein %in% vec_genes_custom)),]
+# df_layer3$plot_color <- "Significantly changing"
+df_layer4 <- df_layer1
 # ggplotly(
   ggplot() +
      geom_hline(yintercept = -log10(0.05), alpha = 0.5) +
@@ -578,9 +590,16 @@ df_layer4 <- rbind(df_layer1, df_layer3)
 # )
 ```
 
-## Mary's SEC data
+Have captured RHOB and KLF2, could be MEF2 promoter region via ERK5 phosphorylating MEF2C, a potential hypothesis. 
 
-EA.hy926 cell lysates. Caveat is that this is performed on lysate. EA.hy926 cells (DMSO or 10 nM PF-08031752 for 4 h). No benzonase. "How would the KLF2 activator (1752) change proteoin complexes?" 5,222 total proteins with at least 2 unique peptides. KLF2 not quantified. Lazear et al. 2023 (Cravatt lab) uses an SEC cutoff of 30. 
+#### Possible bell-curve hypothesis: DUSP1
+
+DUSP1 is a MEK/MAPK phosphatase that is known to negatively regulate the pathway via dephosphorylation. DUSP1 is not changing much in the 10 nM condition, but is at 750 nM. Could this possibly be desphosphorylating MEKK2/3 and/or ERK5, suspected TRAF7 complex members, to down-regulate MEF2 transcription, or KLF2 expression? Could test with [BCI](https://www.selleckchem.com/products/dual-specificity-protein-phosphatase-1-6-Inhibitor-bcl.html). 
+
+## Mary's SEC/PCP data
+
+EA.hy926 cell lysates. Mary mentions a caveat is that this is performed on lysate. EA.hy926 cells (DMSO or 10 nM PF-08031752 for 4 h). No benzonase. "How would the KLF2 activator (1752) change proteoin complexes?" 5,222 total proteins with at least 2 unique peptides. KLF2 not quantified. Lazear et al. 2023 (Cravatt lab) uses an SEC cutoff of 30. 
+
 ```{r}
 ## Read in SEC/PCP data
 ## This has already been processed by a custom software from the Lazear et al. 2023 paper. Read it in directly.
@@ -641,7 +660,9 @@ df_precursor_se <- NULL
 df_precursor_se_dups <- NULL
 df_precursor_se_rest <- NULL
 ```
-Let's choose a practical score cutoff. What does this distribution look like?
+
+Let's choose a practical score cutoff. What are the SEC scores at each of these quantiles?
+
 ```{r}
 ## Top 10%
 quantile(df_plot_se$Score, 0.9)
@@ -657,7 +678,14 @@ ggplot(data = df_plot_se, aes(x = Score)) +
   ggtitle("Histogram of SEC Scores. Dotted line at 95 percentile.")
   
 ```
-95 percentile looks reasonable, though much lower than Cravatt score cutoff of >30. Let's overlap the SEC data with the interactome data. Color scale can be the SEC score. 
+
+95 percentile looks reasonable, though much lower than Cravatt score cutoff of >30. 
+
+#### Overlap SEC/PCP data with TRAF7 IP data. 
+The following graphs are the same TRAF7 IP-MS volcanoes shown as before but with details from the SEC data, representing a Venn diagram between the IP and SEC datasets. 
+
+**Key**: all points are from the overlap of IP-MS and SEC/PCP datasets. Between the IP-MS (1,104 proteins) and SEC/PCP data (5,222 proteins), the overlap is 745 proteins total. The **diamonds** indicate any SEC score >= 95th percentile. The **color scale** indicates the SEC score. The labels highlight proteins with their SEC scores beneath. There is one interactive plot below, the TRAF7 + 30 nM/Control IgG. 
+
 ```{r}
 ## Can we use Protein column as ID? yes
 # sum(duplicated(df_plot_se$Protein))
@@ -694,10 +722,10 @@ df_layer3$plot_label <- paste0(df_layer3$Gene.Names..primary..x, "\n", round(df_
 
 # ggplotly(
 ggplot() +
+   geom_hline(yintercept = -log10(0.05)) +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
    ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.6, size = 4) +
-  geom_hline(yintercept = -log10(0.05)) +
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
@@ -735,10 +763,10 @@ df_layer3$plot_label <- paste0(df_layer3$Gene.Names..primary..x, "\n", round(df_
 
 # ggplotly(
 ggplot() +
+    geom_hline(yintercept = -log10(0.05)) +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
    ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.8, size = 4) +
-  geom_hline(yintercept = -log10(0.05)) +
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
@@ -774,10 +802,10 @@ df_layer3$plot_label <- paste0(df_layer3$Gene.Names..primary..x, "\n", round(df_
 # df_layer4 <- rbind(df_layer1, df_layer3)
 
 ggplot() +
+  geom_hline(yintercept = -log10(0.05)) +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
    ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.75, size = 4) +
-  geom_hline(yintercept = -log10(0.05)) +
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
@@ -791,10 +819,10 @@ ggplot() +
 
 ggplotly(
 ggplot() +
+    geom_hline(yintercept = -log10(0.05)) +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
    ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.75, size = 4) +
-  geom_hline(yintercept = -log10(0.05)) +
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
@@ -832,10 +860,10 @@ df_layer3$plot_label <- paste0(df_layer3$Gene.Names..primary..x, "\n", round(df_
 
 # ggplotly(
 ggplot() +
+  geom_hline(yintercept = -log10(0.05)) +
   geom_point(data = df_layer2, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, color = Score), alpha = 0.4, shape = 16, size = 2) +
   geom_point(data = df_layer1, aes(x = log2FC, y = -log10(adj.pvalue), label = Gene.Names..primary..x, fill = Score) ,color ="#1b1b1b", alpha = 0.6, shape = 23, size = 2) +
    ggrepel::geom_label_repel(data = df_layer3, aes(x = log2FC, y = -log10(adj.pvalue), label = plot_label, color = Score), max.overlaps = 100, force = 2, alpha = 0.75, size = 4) +
-  geom_hline(yintercept = -log10(0.05)) +
     xlim(-5,8) +
     ylim(0, 3) +
     xlab(paste0("Log2FC(", unique(df_plotme_ip_se$Label), ")")) +
@@ -849,4 +877,13 @@ ggplot() +
  # )
 
 ```
+
+#### Final thoughts
+TRIM21 does not seem to differentially pulldown alongside TRAF7, but does appear to have a complex profile altered with '1752; is this an off-target effect? Does disrupting the TRIM21 complex mediate any part of the KLF2 increased expression?
+
+It does look like MAP3K3/MEKK3 is dissociating somewhat from TRAF7, which also may explain the moderate SEC score. 
+
+
+
+
 

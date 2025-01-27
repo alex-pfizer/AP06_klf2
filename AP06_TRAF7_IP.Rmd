@@ -323,7 +323,7 @@ ggplot() +
 
 We are interested in any TRAF7 complex members that associate or dissociate upon '1752 addition. Who are they?
 
-The first condition, Ab-Control, is the baseline (TRAF7 pulldown, no '1752, over IgG). The y-axis indicates the differences in Log2FC as '1752 concentration increases. As the line trends positively, this indicates an increased abundance in the IP as '1752 concentration increases. A positive trend may indicate a TRAF7 complex member that is associating more with '1752. A negative trend may indicate a dissociating TRAF7 complex member. Any protein that is significantly changing at the 5% FDR at 30 nM dosage as compared to IgG control are highlighted in the line graph below. They are also shown in the table below the graph.
+The first condition, Ab-Control, is the baseline (TRAF7 pulldown, no '1752, over IgG). The y-axis indicates the differences in Log2FC as '1752 concentration increases. As the line trends positively, this indicates an increased abundance in the IP as '1752 concentration increases. A positive trend may indicate a TRAF7 complex member that is associating more with '1752. A negative trend may indicate a dissociating TRAF7 complex member. Any protein that is significantly changing at the 5% FDR at 30 nM dosage as compared to IgG control are highlighted in the first line graph below. They are also shown in the table below the graph. Beneath that, there is a second line graph that highlights any proteins from our custom gene list at the top of this report. The proteins captured are also listed beneath the line graph.
 
 ```{r, message = FALSE, warning = FALSE}
 vec_conditions_of_interest <- c("Ab-Control", "03nm-Control", "30nm-Control", "03um-Control")
@@ -376,6 +376,24 @@ df_line <- merge(df_line, pval_30nm, by = "Protein", all.x = T)
 
 df_layer1 <- df_line[which(df_line$adj.pvalue_30nm < alpha_ip),]
 df_layer2 <- df_line[which(df_line$adj.pvalue_30nm > alpha_ip),]
+
+ggplotly(
+ggplot() +
+  geom_point(data = df_layer2, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.5, color = cbPalette[1]) + 
+  geom_line(data = df_layer2, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.2, color = cbPalette[1]) +
+  geom_point(data = df_layer1, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.8, color = cbPalette[7]) + 
+  geom_line(data = df_layer1, aes(x = Label, y = adj_value, group = Protein, label = Gene.Names..primary.), alpha = 0.5, color = cbPalette[7]) +
+  ggrepel::geom_label_repel(data = df_layer1, aes(x = Label, y = adj_value, label = Gene.Names..primary.), alpha = 0.8, color = cbPalette[7]) +
+  xlab("Condition" ) +
+  ylab("Normalized Log2FC")
+  )
+
+knitr::kable((unique(df_layer1[,c("Protein", "Protein.names", "Gene.Names..primary.")])))
+
+## Also add lines that we are interested in from vec_genes_custom
+
+df_layer1 <- df_line[which(df_line$Protein %in% vec_genes_custom),]
+df_layer2 <- df_line[which(!df_line$Protein %in% vec_genes_custom),]
 
 ggplotly(
 ggplot() +
